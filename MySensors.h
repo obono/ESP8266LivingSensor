@@ -6,17 +6,24 @@
 
 #include "DebugMacros.h"
 
+typedef struct {
+    float   illum;
+    float   temp;
+} RECORD_T;
+
 class MySensors
 {
 public:
     MySensors(void);
     ~MySensors();
     void    activate(void);
-    void    doSensing(float &illum, float &temp);
+    bool    doSensing(RECORD_T &record);
     void    inactivate(void);
+    static String convert2JSON(RECORD_T &record);
     static void scanI2C(void);
 
 private:
     Adafruit_TSL2561_Unified    *pTsl;
     Adafruit_BMP280             *pBmp;
+    bool    isActive;
 };

@@ -1,103 +1,139 @@
 #include <Arduino.h>
 
-#include "MyNetworkManager.h"
+#include <user_interface.h>
+
 #include "MySensors.h"
+#include "RecordManager.h"
+#include "NetworkManager.h"
 #include "DebugMacros.h"
 
-#define LOOP_DELAY  (60 * 1000)
-
-static MyNetworkManager netMan;
-static MySensors        sensors;
+#define BUNDLE_RECORDS_COUNT    10
+#define BOOT_WAIT_MS            500 // a half minute
+#define LOOP_INTERVAL_MS        (3 * 60 * 1000UL) // 3 minutes
 
 static void displayChipInformation(void);
+
+static MySensors                sensors;
+static RecordManager<RECORD_T>  recMan;
+static NetworkManager           netMan;
+
+static bool isFromSleep;
 
 /*-----------------------------------------------------------------------------------------------*/
 
 void setup()
 {
+    isFromSleep = (ESP.getResetInfoPtr()->reason == rst_reason::REASON_DEEP_SLEEP_AWAKE);
 #ifdef DEBUG || DEBUG_HTTPS_REDIRECT
     Serial.begin(SERIAL_BAUD_RATE);
-    displayChipInformation();
-    MySensors::scanI2C();
+    if (!isFromSleep) {
+        displayChipInformation();
+        MySensors::scanI2C();
+        recMan.displayInfo();
+    }
 #endif
-    netMan.setupWiFi();
-    sensors.activate();
+    delay(BOOT_WAIT_MS);
 }
 
 void loop()
 {
-    float illum, temp;
-    sensors.doSensing(illum, temp);
-    netMan.doPost(illum, temp);
-    delay(LOOP_DELAY);
+    if (!isFromSleep || !recMan.isFull()) {
+        RECORD_T record;
+        sensors.activate();
+        bool isSensed = sensors.doSensing(record);
+        sensors.inactivate();
+        if (isSensed) recMan.storeRecord(record, !isFromSleep);
+    }
+
+    int recordsCount = recMan.getRecordsCount();
+    if (!isFromSleep && recordsCount > 0 || recordsCount >= BUNDLE_RECORDS_COUNT) {
+        bool isUploaded = false;
+        if (netMan.setupWiFi()) {
+            String recordsPayload = recMan.generateRecordsPayload(MySensors::convert2JSON);
+            isUploaded = netMan.uploadRecords(recordsPayload);
+        }
+        if (isUploaded) recMan.clear();
+    }
+
+    recMan.finalize();
+    long spentTime = millis();
+    dprint("Spent Time (ms)=");
+    dprintln(spentTime);
+    ESP.deepSleep((LOOP_INTERVAL_MS - spentTime) * 1000UL, WAKE_RF_DEFAULT);
+
+    delay(1000);
+    dprintln(F("Why can you came here?"));
 }
 
 static void displayChipInformation(void)
 {
-    dprintln("----- ESP-WROOM-02 ( ESP8266 ) Chip Infomation -----");
+    dprintln(F("----- ESP-WROOM-02 ( ESP8266 ) Chip Infomation -----"));
     dprintln();
 
-    dprint("Core Version = ");
+    dprint(F("Core Version = "));
     dprintln(ESP.getCoreVersion());
 
-    dprint("CPU Frequency = ");
+    dprint(F("CPU Frequency = "));
     dprint(ESP.getCpuFreqMHz());
-    dprintln(" MHz");
+    dprintln(F(" MHz"));
 
-    dprint("ChipID = ");
+    dprint(F("ChipID = "));
     dprintln(ESP.getChipId(), HEX);
 
-    dprint("Flash ID = ");
+    dprint(F("Flash ID = "));
     dprintln(ESP.getFlashChipId(), HEX);
 
-    dprint("SDK version = ");
+    dprint(F("SDK version = "));
     dprintln(ESP.getSdkVersion());
 
-    dprint("Boot version = ");
+    dprint(F("Boot version = "));
     dprintln(ESP.getBootVersion());
 
-    dprint("Boot Mode = ");
+    dprint(F("Boot Mode = "));
     dprintln(ESP.getBootMode());
 
-    dprint("Flash Chip IDE Size = ");
+    dprint(F("Flash Chip IDE Size = "));
     dprint(ESP.getFlashChipSize());
-    dprintln(" byte");
+    dprintln(F(" byte"));
 
-    dprint("Flash Chip Real Size = ");
+    dprint(F("Flash Chip Real Size = "));
     dprint(ESP.getFlashChipRealSize());
-    dprintln(" byte");
+    dprintln(F(" byte"));
 
-    dprint("Flash Frequency = ");
+    dprint(F("Flash Frequency = "));
     dprint(ESP.getFlashChipSpeed());
-    dprintln(" Hz");
+    dprintln(F(" Hz"));
 
-    String mode_str;
+    const __FlashStringHelper *mode_str;
     switch (ESP.getFlashChipMode()) {
-        case 0: mode_str = "QIO";       break;
-        case 1: mode_str = "QOUT";      break;
-        case 2: mode_str = "DIO";       break;
-        case 3: mode_str = "DOUT";      break;
-        case 4: mode_str = "Unknown";   break;
+        case 0: mode_str = F("QIO");    break;
+        case 1: mode_str = F("QOUT");   break;
+        case 2: mode_str = F("DIO");    break;
+        case 3: mode_str = F("DOUT");   break;
+        case 4: mode_str = F("Unknown");break;
         default:                        break;
     }
-    dprintln("Flash Chip Mode = " + mode_str);
+    dprint(F("Flash Chip Mode = "));
+    dprintln(mode_str);
 
-    dprint("Free Heap Size = ");
+    dprint(F("Free Heap Size = "));
     dprintln(ESP.getFreeHeap());
 
-    dprint("Free Sketch Size = ");
+    dprint(F("Free Sketch Size = "));
     dprintln(ESP.getFreeSketchSpace());
 
-    dprint("Sketch Size = ");
+    dprint(F("Sketch Size = "));
     dprintln(ESP.getSketchSize());
 
     uint8_t mac[6];
     WiFi.macAddress(mac);
-    dprintf("WiFi StationAP Mac Address = %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+    dprint(F("WiFi StationAP Mac Address = "));
+    dprintf("%02X:%02X:%02X:%02X:%02X:%02X\r\n",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     WiFi.softAPmacAddress(mac);
-    dprintf("WiFi SoftAP Mac Address = %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+    dprint(F("WiFi SoftAP Mac Address = "));
+    dprintf("%02X:%02X:%02X:%02X:%02X:%02X\r\n",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     dprintln();

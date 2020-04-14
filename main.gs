@@ -1,34 +1,43 @@
 const TOKEN = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 const ATTR_HEADER_ROW = 1;
 const FISRT_RECORD_ROW = 3;
+const RECORDS_PERIOD = 24 * 60 * 60 * 1000; // 1 day
+const CONTENTLENGTH_MAX = 1024;
+const RECORDS_SHEET_NAME = 'Records';
+const MIMETYPE_JSON = 'application/json';
+const INVALID_DATE = 'Invalid Date'
 
 function doGet(e) {
   return createResponse('Hello');
 }
 
 function doPost(e) {
-  if (e == null || e.postData == null || e.postData.contents == null) {
+
+  /*  Check parameters  */
+  if (e === null || e.postData === null || e.postData.contents === null ||
+      e.postData.type !== MIMETYPE_JSON || e.contentLength > CONTENTLENGTH_MAX) {
     return createResponse('Invalid Contents');
   }
-  let requestJSON = e.postData.contents;
-  let requestObj = JSON.parse(requestJSON);
-  if (requestObj['token'] != TOKEN) {
+  let requestObj = JSON.parse(e.postData.contents);
+  if (requestObj === null || requestObj['token'] != TOKEN) {
     return createResponse('Mismatched Token');
   }
-
-  let ss = SpreadsheetApp.getActive()
-  let sheet = ss.getActiveSheet();
-  let headers = sheet.getRange(ATTR_HEADER_ROW, 1, 1, sheet.getLastColumn()).getValues()[0];
-  let numItems = requestObj['records'].length;
-  if (numItems == 0) {
+  let records = requestObj['records'];
+  let numRecords = (records !== null) ? records.length : 0;
+  if (numRecords == 0) {
     return createResponse('No records');
   }
 
-  let lastDateCell = sheet.getRange(sheet.getLastRow(),1);
-  let recordTime = (new Date(lastDateCell.getValue())).getTime();
-  let timeGap = ((new Date()).getTime() - recordTime) / numItems;
+  /*  Append new records  */
+  let currentTime = Date.now();
+  let ss = SpreadsheetApp.getActive()
+  let sheet = ss.getSheetByName(RECORDS_SHEET_NAME);
+  let lastDate = new Date(sheet.getRange(sheet.getLastRow(), 1).getValue());
+  let recordTime = (lastDate.toString() === INVALID_DATE) ? currentTime : lastDate.getTime();
+  let timeGap = (currentTime - recordTime) / numRecords;
+  let headers = sheet.getRange(ATTR_HEADER_ROW, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-  requestObj['records'].map(function(record) {
+  records.map(function(record) {
     let values = [];
     recordTime += timeGap;
     headers.map(function(header) {
@@ -36,9 +45,6 @@ function doPost(e) {
       switch(header) {
         case 'date':
           value = new Date(recordTime);
-          break;
-        case 'mimeType':
-          value = e.postData.type;
           break;
         default:
           value = record[header];
@@ -48,10 +54,23 @@ function doPost(e) {
     });
     sheet.appendRow(values);
   });
-  sheet.getRange(sheet.getLastRow() - numItems + 1, 1, numItems, 1).setNumberFormat('yy/M/d H:mm');
-  sheet.deleteRows(FISRT_RECORD_ROW, numItems);
+  let lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow - numRecords + 1, 1, numRecords, 1).setNumberFormat('yy/M/d H:mm');
 
-  return createResponse("Success");
+  /*  Delete old records  */
+  let row = FISRT_RECORD_ROW;
+  while (row <= lastRow) {
+    let oldDate = new Date(sheet.getRange(row, 1).getValue());
+    if (oldDate.toString() === INVALID_DATE || oldDate.getTime() > currentTime - RECORDS_PERIOD) {
+      break;
+    }
+    row++;
+  }
+  if (row > FISRT_RECORD_ROW) {
+    sheet.deleteRows(FISRT_RECORD_ROW, row - FISRT_RECORD_ROW);
+  }
+
+  return createResponse('Success');
 }
 
 function createResponse(msg) {
@@ -74,8 +93,9 @@ function doPostTest() {
   };
   let postData = new Object();
   postData.contents = JSON.stringify(requestObj);
-  postData.type = 'application/json'; // ContentService.MimeType.JSON;
+  postData.type = MIMETYPE_JSON;
   let e = new Object();
   e.postData = postData;
+  e.contentLength = postData.contents.length;
   doPost(e);
 }

@@ -1,5 +1,7 @@
 #include "MySensors.h"
 
+#define STRING_BUFFER   64
+
 MySensors::MySensors(void)
 {
     pTsl = new Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT);
@@ -23,63 +25,78 @@ void MySensors::activate(void)
     }
     if (pBmp->begin(BMP280_ADDRESS_ALT)) {
         pBmp->setSampling(
-                Adafruit_BMP280::MODE_NORMAL,       /* Operating Mode. */
-                Adafruit_BMP280::SAMPLING_X2,       /* Temp. oversampling */
-                Adafruit_BMP280::SAMPLING_X16,      /* Pressure oversampling */
-                Adafruit_BMP280::FILTER_X16,        /* Filtering. */
-                Adafruit_BMP280::STANDBY_MS_500);   /* Standby time. */
+                Adafruit_BMP280::MODE_NORMAL,       // Operating Mode
+                Adafruit_BMP280::SAMPLING_X2,       // Temp. oversampling
+                Adafruit_BMP280::SAMPLING_X16,      // Pressure oversampling
+                Adafruit_BMP280::FILTER_X16,        // Filtering
+                Adafruit_BMP280::STANDBY_MS_500);   // Standby time
     } else {
         dprintln(F("Couldn't find BMP280."));
     }
+    isActive = true;
 }
 
-void MySensors::doSensing(float &illum, float &temp)
+bool MySensors::doSensing(RECORD_T &record)
 {
+    if (!isActive) return false;
+
     uint16_t broadband, ir;
     pTsl->getLuminosity(&broadband, &ir);
-    illum = pTsl->calculateLux(broadband, ir);
-    temp = pBmp->readTemperature();
-    dprint("Luminosity = ");
-    dprint(illum);
-    dprintln(" lux");
+    record.illum = pTsl->calculateLux(broadband, ir);
+    record.temp = pBmp->readTemperature();
+
+    dprint(F("Luminosity = "));
+    dprint(record.illum);
+    dprintln(F(" lux"));
 
     dprint(F("Temperature = "));
-    dprint(temp);
-    dprintln(" *C");
+    dprint(record.temp);
+    dprintln(F(" *C"));
 
 #if 0
     dprint(F("Pressure = "));
     dprint(pBmp->readPressure() / 100.0f);
-    dprintln(" hPa");
+    dprintln(F(" hPa"));
 
     dprint(F("Approx altitude = "));
     dprint(pBmp->readAltitude(1013.25)); /* Adjusted to local forecast! */
-    dprintln(" m");
+    dprintln(F(" m"));
 #endif
     dprintln();
+
+    return true;
 }
 
 void MySensors::inactivate(void)
 {
-    // do nothing
+    isActive = false;
+}
+
+String MySensors::convert2JSON(RECORD_T &record)
+{
+    char buf[STRING_BUFFER];
+    sprintf(buf, "{\"illum\":%.2f,\"temp\":%.2f}", record.illum, record.temp);
+    return String(buf);
 }
 
 void MySensors::scanI2C(void)
 {
     Wire.begin();
-    dprintln("----- Scan I2C Devices -----");
+    dprintln(F("----- Scan I2C Devices -----"));
     int nDevices = 0;
     for (byte adrs = 1; adrs < 127; adrs++) {
         Wire.beginTransmission(adrs);
         byte error = Wire.endTransmission();
         if (error == 0) {
-            dprintf("I2C device found at address 0x%02X !\r\n", adrs);
+            dprint(F("I2C device found at address 0x"));
+            dprintf("%02X !\r\n", adrs);
             nDevices++;
         } else if (error == 4) {
-            dprintf("Unknown error at address 0x%02X\r\n", adrs);
+            dprint(F("Unknown error at address 0x"));
+            dprintf("%02X !\r\n", adrs);
         }
     }
     dprint(nDevices);
-    dprintln(" device(s) is found.");
+    dprintln(F(" device(s) is found."));
     dprintln();
 }
