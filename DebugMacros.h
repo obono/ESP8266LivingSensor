@@ -1,7 +1,7 @@
 #pragma once
 
 #define SERIAL_BAUD_RATE    74880 // 115200
-#define DEBUG
+//#define DEBUG
 //#define DEBUG_HTTPS_REDIRECT
 
 #ifdef DEBUG

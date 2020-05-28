@@ -9,6 +9,7 @@
 typedef struct {
     float   illum;
     float   temp;
+    float   sound;
 } RECORD_T;
 
 class MySensors
@@ -23,6 +24,7 @@ public:
     static void scanI2C(void);
 
 private:
+    float   doSensingSound(long duration);
     Adafruit_TSL2561_Unified    *pTsl;
     Adafruit_BMP280             *pBmp;
     bool    isActive;

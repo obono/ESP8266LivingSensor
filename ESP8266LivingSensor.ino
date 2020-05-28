@@ -3,64 +3,67 @@
 #include <user_interface.h>
 
 #include "MySensors.h"
-#include "RecordManager.h"
 #include "NetworkManager.h"
 #include "DebugMacros.h"
 
-#define BUNDLE_RECORDS_COUNT    10
-#define BOOT_WAIT_MS            500 // a half minute
+#define SENSORS_WAIT_MS         500 // a half minute
 #define LOOP_INTERVAL_MS        (3 * 60 * 1000UL) // 3 minutes
 
 static void displayChipInformation(void);
 
-static MySensors                sensors;
-static RecordManager<RECORD_T>  recMan;
-static NetworkManager           netMan;
-
-static bool isFromSleep;
+static MySensors        sensors;
+static NetworkManager   netMan;
+static bool isBooted;
 
 /*-----------------------------------------------------------------------------------------------*/
 
 void setup()
 {
-    isFromSleep = (ESP.getResetInfoPtr()->reason == rst_reason::REASON_DEEP_SLEEP_AWAKE);
+    isBooted = !(ESP.getResetInfoPtr()->reason == rst_reason::REASON_DEEP_SLEEP_AWAKE);
 #ifdef DEBUG || DEBUG_HTTPS_REDIRECT
     Serial.begin(SERIAL_BAUD_RATE);
-    if (!isFromSleep) {
+    if (isBooted) {
         displayChipInformation();
         MySensors::scanI2C();
-        recMan.displayInfo();
     }
 #endif
-    delay(BOOT_WAIT_MS);
 }
 
 void loop()
 {
-    if (!isFromSleep || !recMan.isFull()) {
-        RECORD_T record;
-        sensors.activate();
-        bool isSensed = sensors.doSensing(record);
-        sensors.inactivate();
-        if (isSensed) recMan.storeRecord(record, !isFromSleep);
+    sensors.activate();
+    delay(SENSORS_WAIT_MS - millis());
+    RECORD_T record;
+    bool isSuccess = sensors.doSensing(record);
+    sensors.inactivate();
+    if (!isSuccess) {
+        dprintln(F("Failed to sense..."));
+        goto bail;
     }
 
-    int recordsCount = recMan.getRecordsCount();
-    if (!isFromSleep && recordsCount > 0 || recordsCount >= BUNDLE_RECORDS_COUNT) {
-        bool isUploaded = false;
-        if (netMan.setupWiFi()) {
-            String recordsPayload = recMan.generateRecordsPayload(MySensors::convert2JSON);
-            isUploaded = netMan.uploadRecords(recordsPayload);
+    isSuccess = netMan.setupWiFi();
+    if (isSuccess) {
+        String recordsPayload = "[" + MySensors::convert2JSON(record) + "]";
+        isSuccess = netMan.uploadRecords(recordsPayload);
+        if (!isSuccess) {
+            dprintln(F("Failed to upload..."));
         }
-        if (isUploaded) recMan.clear();
+    } else {
+        dprintln(F("Failed to setup Wi-Fi..."));
     }
 
-    recMan.finalize();
+bail:
     long spentTime = millis();
     dprint("Spent Time (ms)=");
     dprintln(spentTime);
-    ESP.deepSleep((LOOP_INTERVAL_MS - spentTime) * 1000UL, WAKE_RF_DEFAULT);
 
+    if (isSuccess) {
+        dprintln(F("Deep sleep."));
+        ESP.deepSleep((LOOP_INTERVAL_MS - spentTime) * 1000UL, WAKE_RF_DEFAULT);
+    } else {
+        dprintln(F("Restart!"));
+        ESP.restart();
+    }
     delay(1000);
     dprintln(F("Why can you came here?"));
 }

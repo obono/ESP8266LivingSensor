@@ -5,7 +5,37 @@ const RECORDS_PERIOD = 24 * 60 * 60 * 1000; // 1 day
 const CONTENTLENGTH_MAX = 1024;
 const RECORDS_SHEET_NAME = 'Records';
 const MIMETYPE_JSON = 'application/json';
-const INVALID_DATE = 'Invalid Date'
+const INVALID_DATE = 'Invalid Date';
+const NUMBER_FORMAT = 'yy/M/d H:mm';
+
+function setup() {
+  let ss = SpreadsheetApp.getActive()
+  let sheet = ss.getSheetByName(RECORDS_SHEET_NAME);
+  if (sheet) {
+    ss.deleteSheet(sheet);
+  }
+  sheet = ss.insertSheet(RECORDS_SHEET_NAME);
+
+  let headerValues = [
+    [ 'date', 'illum', 'temp', 'sound' ],
+    [ '日時', '明るさ', '室温', '音レベル' ],
+  ];
+  let rows = headerValues.length;
+  let columns = headerValues[0].length;
+  let headerRange = sheet.getRange(1, 1, rows, columns);
+  headerRange.setValues(headerValues);
+  headerRange.setBackground('#4a86e8');
+  headerRange.setFontColor('white');
+  headerRange.setFontWeight('bold');
+
+  let dateRange = sheet.getRange(FISRT_RECORD_ROW, 1);
+  dateRange.setValue(new Date());
+  dateRange.setNumberFormat(NUMBER_FORMAT);
+
+  sheet.deleteRows(FISRT_RECORD_ROW + 1, 1000/*sheet.getLastRow()*/ - FISRT_RECORD_ROW);
+  sheet.deleteColumns(columns + 1, 26/*sheet.getLastColumn()*/ - columns);
+  sheet.setFrozenRows(rows);
+}
 
 function doGet(e) {
   return createResponse('Hello');
@@ -55,7 +85,7 @@ function doPost(e) {
     sheet.appendRow(values);
   });
   let lastRow = sheet.getLastRow();
-  sheet.getRange(lastRow - numRecords + 1, 1, numRecords, 1).setNumberFormat('yy/M/d H:mm');
+  sheet.getRange(lastRow - numRecords + 1, 1, numRecords, 1).setNumberFormat(NUMBER_FORMAT);
 
   /*  Delete old records  */
   let row = FISRT_RECORD_ROW;
