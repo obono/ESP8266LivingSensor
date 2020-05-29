@@ -2,13 +2,15 @@
 
 ## Description
 
-A solution to record indoor environment using Google spreadsheet and ESP-WROOM-02 with several sensors.
+A solution to record indoor environment using Google Sheets and ESP-WROOM-02 with several sensors.
+
+![Concept image](etc/concept.png)
 
 ## Recording server
 
-A Google spreadsheet is utilized for recording server.
+Google Sheets is utilized for recording server.
 
-* Create a new Google spreadsheet
+* Create a new spreadsheet
 * Open script editor
   1. Click Tools from the menu bar
   1. Select "Script editor" subitem
@@ -57,7 +59,13 @@ This device measures the temperature, illuminance and sound level, and upload th
 
 #### Circuit diagram
 
-![Circuit diagram](etc/circuit.png)
+Main circuit
+
+![Main circuit diagram](etc/circuit_main.png)
+
+Writer circuit
+
+![Writer circuit diagram](etc/circuit_writer.png)
 
 #### Production Example
 
