@@ -37,7 +37,7 @@ This device measures the temperature, illuminance and sound level, and upload th
 
 ### Hardware
 
-#### Materials
+#### Components
 
 * [ESP-WROOM-02](http://akizukidenshi.com/catalog/g/gM-09607/)
 * Sensors
@@ -46,7 +46,7 @@ This device measures the temperature, illuminance and sound level, and upload th
   * Condenser microphone: [AE-SPU0414](http://akizukidenshi.com/catalog/g/gM-08940/)
 * LDO module (3.3V): [M-3V3SIP](https://www.aitendo.com/product/13061)
 * USB to serial UART module: [AE-FT234X](http://akizukidenshi.com/catalog/g/gM-08461/)
-* Registers
+* Resistors
   * 200k&Omega; &times; 2
   * 10k&Omega; &times; 6
   * 2.2k&Omega; &times; 1
@@ -141,4 +141,4 @@ Then, you can transfer binary data to ESP-WROOM-02 throungh the writer circuit.
 
 ![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-These codes are licensed under [MIT-License](LICENSE).
+These codes are licensed under [MIT License](LICENSE).
